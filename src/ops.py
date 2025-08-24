@@ -65,5 +65,16 @@ def col2im(cols, X_shape, kernel_size, out_h, out_w, stride=1 , padding =1):
         return dXp
     return dXp[:, :, p:p+H, p:p+W]
 
+def softmax(X):
+    x = x - np.max(X, axis=1, keepdims=True)
+    e = np.exp(x)
+    return e / np.sum(e, axis=1, keepdims=True)
 
-    
+def cross_entropy(probs, y_true):
+    N = probs.shape[0]
+    if y_true.ndim == 1:
+        p = np.clip(probs[np.arange(N), y_true], 1e-12, 1.0)
+        return -np.mean(np.log(p))
+    else:
+        p = np.clip(probs, 1e-12, 1.0)
+        return -np.mean(np.sum(y_true * np.log(p), axis=1))
