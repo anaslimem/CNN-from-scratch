@@ -33,5 +33,23 @@ class Conv2D(Layer):
         W_row = W.reshape(self.out_channels, -1)
         out = (W_row @ self.X_cols + b)
         N = X.shape[0]
-        return out.reshape(self.out_channels, N, self.out_h, self.out_w).transpose(1,0,2,3)
+        out = out.reshape(self.out_channels, N, self.out_h, self.out_w).transpose(1,0,2,3)
         return out
+    
+    def backward(self, grad_out):
+        N = grad_out.shape[0]
+        grad_row = grad_out.transpose(1,0,2,3).reshape(self.out_channels, -1)
+        self.grads['b'] = np.sum(grad_row, axis=1, keepdims=True)
+        self.grads['W'] = (grad_row @ self.X_cols.T).reshape(self.params['W'].shape)
+        W_row = self.params['W'].reshape(self.out_channels, -1)
+        dcols = W_row.T @ grad_row
+        dx = col2im(dcols, self.X_shape, self.kernel_size, self.out_h, self.out_w, self.stride, self.padding)
+        return dx
+
+class ReLU(Layer):
+    def forward(self, X, training=True):
+        self.mask = (X > 0).astype(X.dtype)
+        return X * self.mask
+    def backward(self, grad_out):
+        return grad_out * self.mask
+    
