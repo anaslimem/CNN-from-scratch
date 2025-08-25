@@ -52,4 +52,38 @@ class ReLU(Layer):
         return X * self.mask
     def backward(self, grad_out):
         return grad_out * self.mask
+
+class MaxPool2D(Layer):
+    def __init__(self, kernel_size=2, stride=2):
+        super().__init__()
+        kh, kw = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
+        self.kh = kh
+        self.kw = kw
+        self.stride = stride
     
+    def forward(self, X, training=True):
+        self.X_shape = X.shape
+        N, C, H, W = X.shape
+        cols, out_h, out_w = im2col(X, (self.kh, self.kw), self.stride, 0)
+        cols_r = cols.reshape(C*self.kh*self.kw, N*out_h*out_w)
+        self.argmax = np.argmax(cols_r, axis=0)
+        out = np.max(cols_r, axis=1)
+        out = out.reshape(N, C, out_h, out_w).transpose(1, 0, 2, 3)
+        self.out_h = out_h
+        self.out_w = out_w
+        return out
+    
+    def backward(self, grad_out):
+        N, C, out_h, out_w = grad_out.shape
+        grad_cols = np.zeros((C*self.kh*self.kw, N*out_h*out_w), dtype=grad_out.dtype)
+        flat = grad_out.transpose(1,0,2,3).reshape(C, -1)
+        idx = self.argmax
+        rows = np.arange(C)[:, None]
+        cols_index = np.arange(N*out_h*out_w)[None, :]
+        grad_cols[rows, idx, cols_index] = flat
+        grad_cols = grad_cols.reshape(C, self.kh, self.kw, N, out_h, out_w)
+        dx = col2im(grad_cols, self.X_shape, (self.kh, self.kw), self.out_h, self.out_w, self.stride, 0)
+        return dx
+    
+
+
