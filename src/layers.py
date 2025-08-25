@@ -154,5 +154,21 @@ class Linear(Layer):
         self.grads['b'] = np.sum(grad_out, axis=0, keepdims=True)
         return grad_out @ self.params['W'].T
     
+class SoftmaxCrossEntropyLoss(Layer):
+    def forward(self, logits, y_true, training=True):
+        self.probs = softmax(logits)
+        self.y_true = y_true
+        return cross_entropy(self.probs, y_true)
 
-    
+    def backward(self, _=None):
+        N = self.probs.shape[0]
+        if self.y_true.ndim == 1:
+            grad = self.probs.copy()
+            grad[np.arange(N), self.y_true] -= 1
+            grad /= N
+            return grad
+        else:
+            return (self.probs - self.y_true) / N
+
+
+
