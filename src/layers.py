@@ -137,6 +137,22 @@ class Flatten(Layer):
     
     def backward(self, grad_out):
         return grad_out.reshape(self.orig)
-        
+
+class Linear(Layer):
+    def __init__(self, in_features, out_features, weight_scale=None):
+        super().__init__()
+        scale = weight_scale if weight_scale is not None else np.sqrt(2. / in_features)
+        self.params['W'] = np.random.randn(out_features, in_features) * scale
+        self.params['b'] = np.zeros((1, out_features))
+    
+    def forward(self, X, training=True):
+        self.X = X
+        return X @ self.params['W'] + self.params['b']
+
+    def backward(self, grad_out):
+        self.grads['W'] = self.X.T @ grad_out
+        self.grads['b'] = np.sum(grad_out, axis=0, keepdims=True)
+        return grad_out @ self.params['W'].T
+    
 
     
