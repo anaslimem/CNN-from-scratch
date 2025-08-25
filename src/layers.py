@@ -170,5 +170,39 @@ class SoftmaxCrossEntropyLoss(Layer):
         else:
             return (self.probs - self.y_true) / N
 
+class BatchNorm2D(Layer):
+    def __init__(self, num_features, momentum=0.9, eps=1e-5):
+        super().__init__()
+        self.params['gamma'] = np.ones((1, num_features, 1, 1))
+        self.params['beta'] = np.zeros((1, num_features, 1, 1))
+        self.momentum = momentum
+        self.eps = eps
+        self.running_mean = np.zeros((1, num_features, 1, 1))
+        self.running_var = np.zeros((1, num_features, 1, 1))
 
-
+    def forward(self, X, training=True):
+        self.X = X
+        if training:
+            mean = np.mean(X, axis=(0, 2, 3), keepdims=True)
+            var = np.var(X, axis=(0, 2, 3), keepdims=True)  
+            self.x_hat = (X - mean) / np.sqrt(var + self.eps)
+            out = self.params['gamma'] * self.x_hat + self.params['beta']
+            self.running_mean = self.momentum * self.running_mean + (1 - self.momentum) * mean
+            self.running_var = self.momentum * self.running_var + (1 - self.momentum) * var
+            self.cache = (mean, var)
+            return out
+        else:
+            self.x_hat = (X - self.running_mean) / np.sqrt(self.running_var + self.eps)
+            return self.params['gamma'] * self.x_hat + self.params['beta']
+    
+    def backward(self, grad_out):
+        gamma = self.params['gamma']
+        mean, var = self.cache
+        N, C, H, W = self.X.shape
+        m = N * H * W
+        dx_hat = grad_out * gamma
+        inv_std = 1. / np.sqrt(var + self.eps)
+        dx = (1.0/m) * inv_std * (m*dx_hat - np.sum(dx_hat, axis=(0,2,3), keepdims=True) - (self.X - mean) * inv_std**2 * np.sum(dx_hat * (self.X - mean), axis=(0,2,3), keepdims=True))
+        self.grads['gamma'] = np.sum(grad_out * self.x_hat, axis=(0,2,3), keepdims=True)
+        self.grads['beta'] = np.sum(grad_out, axis=(0,2,3), keepdims=True)
+        return dx
