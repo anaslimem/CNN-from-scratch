@@ -85,5 +85,30 @@ class MaxPool2D(Layer):
         dx = col2im(grad_cols, self.X_shape, (self.kh, self.kw), self.out_h, self.out_w, self.stride, 0)
         return dx
     
+class AvgPool2D(Layer):
+    def __init__(self, kernel_size=2, stride=2):
+        super().__init__()
+        kh, kw = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
+        self.kh = kh
+        self.kw = kw
+        self.stride = stride
 
-
+    def forward(self, X, training=True):
+        self.X_shape = X.shape
+        N, C, H, W = X.shape
+        cols, out_h, out_w = im2col(X, (self.kh, self.kw), self.stride, 0)
+        cols_r = cols.reshape(C*self.kh*self.kw, N*out_h*out_w)
+        out = np.mean(cols_r, axis=0)
+        out = out.reshape(N, C, out_h, out_w).transpose(1, 0, 2, 3)
+        self.out_h = out_h
+        self.out_w = out_w
+        return out
+    
+    def backward(self, grad_out):
+        N, C, out_h, out_w = grad_out.shape
+        grad_cols = np.repeat(grad_out.transpose(1,0,2,3).reshape(C, 1, -1), self.kh*self.kw, axis=1)
+        grad_cols /= (self.kh * self.kw)
+        grad_cols = grad_cols.reshape(C*self.kh*self.kw, N*out_h*out_w)
+        dx = col2im(grad_cols, self.X_shape, (self.kh, self.kw), self.out_h, self.out_w, self.stride, 0)
+        return dx
+    
