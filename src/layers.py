@@ -112,3 +112,22 @@ class AvgPool2D(Layer):
         dx = col2im(grad_cols, self.X_shape, (self.kh, self.kw), self.out_h, self.out_w, self.stride, 0)
         return dx
     
+class Dropout(layer):
+    def __init__(self, p=0.5):
+        super().__init__()
+        self.p = p
+        self.mask = None
+
+    def forward(self, X, training=True):
+        if training and self.p > 0:
+            self.mask = (np.random.rand(*X.shape) > self.p).astype(X.dtype) / (1.0 - self.p)
+            return X * self.mask
+        self.mask = None
+        return X
+        
+    def backward(self, grad_out):
+        if self.mask is None:
+            return grad_out
+        return grad_out * self.mask
+
+    
