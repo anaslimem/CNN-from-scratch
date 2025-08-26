@@ -1,3 +1,4 @@
+
 import numpy as np
 
 def im2col(X, kernel_size, stride=1, padding=0):
@@ -12,30 +13,30 @@ def im2col(X, kernel_size, stride=1, padding=0):
         cols: (C*kh*kw, N*out_h*out_w)
         out_h, out_w: output spatial dims
     """
-    # Get dimensions
     N, C, H, W = X.shape
     kh, kw = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
     s = stride
     p = padding
 
-    H_p, W_p = H + 2 * p, W + 2 * p
-    Xp = np.pad(X, ((0,0), (0,0), (p,p), (p,p)), mode='constant')
-    out_h = (H_p - kh) // s + 1
-    out_w = (W_p - kw) // s + 1
+    H_p, W_p = H + 2*p, W + 2*p
+    Xp = np.pad(X, ((0,0),(0,0),(p,p),(p,p)), mode="constant")
+    out_h = (H_p - kh)//s + 1
+    out_w = (W_p - kw)//s + 1
 
-    cols = np.zeros((C * kh * kw, N * out_h * out_w), dtype=X.dtype)
+    cols = np.zeros((C*kh*kw, N*out_h*out_w), dtype=Xp.dtype)
     col = 0
     for i in range(out_h):
         i_min = i*s
-        i_max = i_min + kh
+        i_max = i*s + kh
         for j in range(out_w):
             j_min = j*s
-            j_max = j_min + kw
-            cols[col] = Xp[:, :, i_min:i_max, j_min:j_max].reshape(N, -1).T
+            j_max = j*s + kw
+            patch = Xp[:, :, i_min:i_max, j_min:j_max]  # (N,C,kh,kw)
+            cols[:, col:col+N] = patch.reshape(N, -1).T
             col += N
     return cols, out_h, out_w
 
-def col2im(cols, X_shape, kernel_size, out_h, out_w, stride=1 , padding =1):
+def col2im(cols, X_shape, kernel_size, out_h, out_w, stride=1, padding=0):
     """
     Inverse of im2col for accumulating gradients.
     Args:
@@ -49,24 +50,26 @@ def col2im(cols, X_shape, kernel_size, out_h, out_w, stride=1 , padding =1):
     s = stride
     p = padding
 
-    H_p, W_p = H + 2 * p, W + 2 * p
-    dXp = np.zeros((N, C, H_p, W_p), dtype=cols.dtype)
+    H_p, W_p = H + 2*p, W + 2*p
+    Xp = np.zeros((N, C, H_p, W_p), dtype=cols.dtype)
 
     col = 0
     for i in range(out_h):
         i_min = i*s
-        i_max = i_min + kh
+        i_max = i*s + kh
         for j in range(out_w):
             j_min = j*s
-            j_max = j_min + kw
-            dXp[:, :, i_min:i_max, j_min:j_max] += cols[col:col+N].T.reshape(N, C, kh, kw)
+            j_max = j*s + kw
+            patch = cols[:, col:col+N].T.reshape(N, C, kh, kw)
+            Xp[:, :, i_min:i_max, j_min:j_max] += patch
             col += N
-    if p == 0:
-        return dXp
-    return dXp[:, :, p:p+H, p:p+W]
 
-def softmax(X):
-    x = x - np.max(X, axis=1, keepdims=True)
+    if p == 0:
+        return Xp
+    return Xp[:, :, p:p+H, p:p+W]
+
+def softmax(x):
+    x = x - np.max(x, axis=1, keepdims=True)
     e = np.exp(x)
     return e / np.sum(e, axis=1, keepdims=True)
 
