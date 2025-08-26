@@ -1,72 +1,44 @@
 
 import numpy as np
 
-def im2col(X, kernel_size, stride=1, padding=0):
-    """
-    Convert 4D input X (N, C, H, W) into columns for GEMM-based convolution.
-    Args:
-        X: ndarray of shape (N, C, H, W)
-        kernel_size: (kh, kw)
-        stride: int
-        padding: int
-    Returns:
-        cols: (C*kh*kw, N*out_h*out_w)
-        out_h, out_w: output spatial dims
-    """
+def im2col(X, kernel_size, stride, padding):
+    # Expect input X in channels-first format: (N, C, H, W)
     N, C, H, W = X.shape
-    kh, kw = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
-    s = stride
-    p = padding
+    KH, KW = kernel_size
+    # Calculate output height/width
+    OH = (H + 2 * padding - KH) // stride + 1
+    OW = (W + 2 * padding - KW) // stride + 1
 
-    H_p, W_p = H + 2*p, W + 2*p
-    Xp = np.pad(X, ((0,0),(0,0),(p,p),(p,p)), mode="constant")
-    out_h = (H_p - kh)//s + 1
-    out_w = (W_p - kw)//s + 1
+    # Pad input on height and width dims
+    X_padded = np.pad(X, ((0, 0), (0, 0), (padding, padding), (padding, padding)), mode="constant")
 
-    cols = np.zeros((C*kh*kw, N*out_h*out_w), dtype=Xp.dtype)
-    col = 0
-    for i in range(out_h):
-        i_min = i*s
-        i_max = i*s + kh
-        for j in range(out_w):
-            j_min = j*s
-            j_max = j*s + kw
-            patch = Xp[:, :, i_min:i_max, j_min:j_max]  # (N,C,kh,kw)
-            cols[:, col:col+N] = patch.reshape(N, -1).T
-            col += N
-    return cols, out_h, out_w
+    # cols will hold patches with shape (N, C, KH, KW, OH, OW)
+    cols = np.zeros((N, C, KH, KW, OH, OW), dtype=X.dtype)
+    for y in range(KH):
+        y_max = y + stride * OH
+        for x in range(KW):
+            x_max = x + stride * OW
+            cols[:, :, y, x, :, :] = X_padded[:, :, y:y_max:stride, x:x_max:stride]
 
-def col2im(cols, X_shape, kernel_size, out_h, out_w, stride=1, padding=0):
-    """
-    Inverse of im2col for accumulating gradients.
-    Args:
-        cols: (C*kh*kw, N*out_h*out_w)
-        X_shape: (N, C, H, W)
-    Returns:
-        dX: (N, C, H, W)
-    """
+    # Transpose to (N, OH, OW, C, KH, KW) then reshape to (N*OH*OW, C*KH*KW)
+    cols = cols.transpose(0, 4, 5, 1, 2, 3).reshape(N * OH * OW, -1)
+    return cols, OH, OW
+
+def col2im(cols, X_shape, kernel_size, stride, padding):
     N, C, H, W = X_shape
-    kh, kw = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
-    s = stride
-    p = padding
+    KH, KW = kernel_size
+    OH = (H + 2*padding - KH) // stride + 1
+    OW = (W + 2*padding - KW) // stride + 1
 
-    H_p, W_p = H + 2*p, W + 2*p
-    Xp = np.zeros((N, C, H_p, W_p), dtype=cols.dtype)
+    cols_reshaped = cols.reshape(N, OH, OW, C, KH, KW).transpose(0, 3, 4, 5, 1, 2)
+    X_padded = np.zeros((N, C, H + 2*padding, W + 2*padding))
 
-    col = 0
-    for i in range(out_h):
-        i_min = i*s
-        i_max = i*s + kh
-        for j in range(out_w):
-            j_min = j*s
-            j_max = j*s + kw
-            patch = cols[:, col:col+N].T.reshape(N, C, kh, kw)
-            Xp[:, :, i_min:i_max, j_min:j_max] += patch
-            col += N
-
-    if p == 0:
-        return Xp
-    return Xp[:, :, p:p+H, p:p+W]
+    for y in range(KH):
+        y_max = y + stride*OH
+        for x in range(KW):
+            x_max = x + stride*OW
+            X_padded[:, :, y:y_max:stride, x:x_max:stride] += cols_reshaped[:, :, y, x, :, :]
+    return X_padded[:, :, padding:H+padding, padding:W+padding]
 
 def softmax(x):
     x = x - np.max(x, axis=1, keepdims=True)
@@ -75,9 +47,5 @@ def softmax(x):
 
 def cross_entropy(probs, y_true):
     N = probs.shape[0]
-    if y_true.ndim == 1:
-        p = np.clip(probs[np.arange(N), y_true], 1e-12, 1.0)
-        return -np.mean(np.log(p))
-    else:
-        p = np.clip(probs, 1e-12, 1.0)
-        return -np.mean(np.sum(y_true * np.log(p), axis=1))
+    correct_logprobs = -np.log(probs[range(N), y_true] + 1e-9)
+    return np.sum(correct_logprobs) / N
