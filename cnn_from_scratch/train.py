@@ -79,6 +79,9 @@ def train(num_epochs=10, batch_size=128, lr=0.01, weight_decay=5e-4, dropout_p=0
         print(f"Epoch {epoch}/{num_epochs} - loss: {avg_loss:.4f} - test acc: {acc*100:.2f}%")
 
     if save_plots:
+        import os
+        os.makedirs("plots", exist_ok=True)
+
         plt.figure()
         plt.plot(range(1, num_epochs+1), train_losses, label="train loss")
         plt.xlabel("Epoch"); plt.ylabel("Loss"); plt.legend(); plt.tight_layout()
