@@ -144,4 +144,3 @@ Learn the differences between SGD vs AdamW optimizers
 
 Appreciate the mechanics of convolution, pooling, and dropout
 
----
