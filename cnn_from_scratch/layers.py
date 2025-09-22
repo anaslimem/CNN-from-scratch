@@ -10,9 +10,7 @@ class Layer:
     def backward(self, grad_out):
         raise NotImplementedError
 
-# -------------------------
 # Conv2D (im2col + GEMM)
-# -------------------------
 class Conv2D(Layer):
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, weight_scale=None):
         super().__init__()
@@ -74,15 +72,13 @@ class Conv2D(Layer):
         self.grads['W'] = dW_row.reshape(self.params['W'].shape)
 
         # dcols = grad_rows @ W_row -> (N*OH*OW, IC*kh*kw)
-        dcols = grad_rows @ W_row  # (N*OH*OW, IC*kh*kw)
+        dcols = grad_rows @ W_row 
 
         # col2im to get dx shape (N, C, H, W)
         dx = col2im(dcols, self.X_shape, self.kernel_size, self.stride, self.padding)
         return dx
 
-# -------------------------
 # ReLU
-# -------------------------
 class ReLU(Layer):
     def __init__(self):
         super().__init__()
@@ -95,9 +91,7 @@ class ReLU(Layer):
     def backward(self, grad_out):
         return grad_out * self._mask
 
-# -------------------------
 # MaxPool2D
-# -------------------------
 class MaxPool2D(Layer):
     def __init__(self, kernel_size=2, stride=2):
         super().__init__()
@@ -150,10 +144,8 @@ class MaxPool2D(Layer):
         # col2im
         dx = col2im(grad_cols, self._cache['input_shape'], (self.kh, self.kw), self.stride, 0)
         return dx
-
-# -------------------------
+        
 # AvgPool2D
-# -------------------------
 class AvgPool2D(Layer):
     def __init__(self, kernel_size=2, stride=2):
         super().__init__()
@@ -183,10 +175,8 @@ class AvgPool2D(Layer):
         grad_cols = grad_cols.reshape(N*OH*OW, -1)  # (N*OH*OW, C*kh*kw)
         dx = col2im(grad_cols, self._cache['input_shape'], (self.kh, self.kw), self.stride, 0)
         return dx
-
-# -------------------------
+        
 # Flatten
-# -------------------------
 class Flatten(Layer):
     def __init__(self):
         super().__init__()
@@ -199,9 +189,7 @@ class Flatten(Layer):
     def backward(self, grad_out):
         return grad_out.reshape(self.orig_shape)
 
-# -------------------------
 # Linear (Dense)
-# -------------------------
 class Linear(Layer):
     def __init__(self, in_features, out_features, weight_scale=None):
         super().__init__()
@@ -222,9 +210,7 @@ class Linear(Layer):
         dx = grad_out @ self.params['W'].T
         return dx
 
-# -------------------------
 # Dropout (inverted)
-# -------------------------
 class Dropout(Layer):
     def __init__(self, p=0.5):
         super().__init__()
@@ -244,9 +230,7 @@ class Dropout(Layer):
             return grad_out
         return grad_out * self.mask
 
-# -------------------------
 # Softmax + CrossEntropy combined
-# -------------------------
 class SoftmaxCrossEntropy(Layer):
     def __init__(self):
         super().__init__()
@@ -266,9 +250,7 @@ class SoftmaxCrossEntropy(Layer):
         grad /= N
         return grad
 
-# -------------------------
 # BatchNorm2D (per-channel)
-# -------------------------
 class BatchNorm2D(Layer):
     def __init__(self, num_features, momentum=0.9, eps=1e-5):
         super().__init__()
